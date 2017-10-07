@@ -770,9 +770,8 @@ class SEDMLCodeFactory(object):
 
         # generate empty ndarray for storage
         shape, rangeIds = SEDMLCodeFactory.getShapeFromTaskTree(tree)
-
-        print(tree)
-        print(shape, rangeIds)
+        # print(tree)
+        # print(shape, rangeIds)
 
         rootTask = treeNodes[0].task
         lines = [
@@ -822,7 +821,6 @@ class SEDMLCodeFactory(object):
             if size > 1:
                 shape.append(size)
                 rangeIds.append(rangeId)
-            # FIXME: handle the case of multiple subtasks
 
         return shape, rangeIds
 
@@ -1400,12 +1398,9 @@ class SEDMLCodeFactory(object):
     def dataGeneratorToPython(doc, generator):
         """ Create variable from the data generators and the simulation results and data sources.
 
-            The data of repeatedTasks is handled differently depending
-            on if reset=True or reset=False.
-            reset=True:
-                every repeat is a single curve, i.e. the data is a list of data
-            reset=False:
-                all curves belong to a single simulation and are concatenated to one dataset
+        :param doc:
+        :param generator:
+        :return:
         """
         lines = []
         gid = generator.getId()
@@ -1419,7 +1414,7 @@ class SEDMLCodeFactory(object):
             varId = var.getId()
             variables[varId] = "__var__{}".format(varId)
 
-        # create python for variables
+        # create variables in python
         for var in generator.getListOfVariables():
             varId = var.getId()
             taskId = var.getTaskReference()
@@ -1429,53 +1424,19 @@ class SEDMLCodeFactory(object):
             # simulation data
             # --------------------
             if task is not None:
-
                 modelId = task.getModelReference()
                 selection = SEDMLCodeFactory.selectionFromVariable(var, modelId)
                 sid = selection.id
 
-                # additional information for heuristic processing
-                isTime = False
-                if selection.type == "symbol" and selection.id == "time":
-                    isTime = True
-
-                isResetModel = True
-                if task.getTypeCode() == libsedml.SEDML_TASK_REPEATEDTASK:
-                    isResetModel = task.getResetModel()
-
                 if selection.type == "concentration":
                     sid = "[{}]".format(selection.id)
 
-                # get the shape from the result and read out the variable from every element of the ndarray object
-                    # get the dimensions, i.e., what is the shape of the task
-                    # DataGenerator have the same dimensions like the underlying task
-                    # generate empty ndarray for storage
-
-                # [sim['{}'] for sim in {}]
+                # DataGenerator have the same dimensions like the underlying task, just create the variables by selection
                 lines = [
                     "__var__{} = np.empty(shape={}.shape, dtype=object)".format(varId, task.getId()),
                     "for __index__, __item__ in np.ndenumerate({}):".format(task.getId()),
                     "    __var__{}[__index__] = __item__['{}']".format(varId, sid)
                 ]
-                '''
-                # Series of curves
-                if isResetModel is True:
-                    # If each entry in the task consists of a single point (e.g. steady state scan)
-                    # , concatenate the points. Otherwise, plot as separate curves.
-                    lines.append("__var__{} = np.concatenate([sim['{}'] for sim in {}])".format(varId, sid, taskId))
-                else:
-                    # One curve via time adjusted concatenate
-                    if isTime is True:
-                        lines.append("__offsets__{} = np.cumsum(np.array([sim['{}'][-1] for sim in {}]))".format(taskId, sid, taskId))
-                        lines.append("__offsets__{} = np.insert(__offsets__{}, 0, 0)".format(taskId, taskId))
-                        lines.append("__var__{} = np.transpose(np.array([sim['{}']+__offsets__{}[k] for k, sim in enumerate({})]))".format(varId, sid, taskId, taskId))
-                        lines.append("__var__{} = np.concatenate(np.transpose(__var__{}))".format(varId, varId))
-                    else:
-                        lines.append("__var__{} = np.transpose(np.array([sim['{}'] for sim in {}]))".format(varId, sid, taskId))
-                        lines.append("__var__{} = np.concatenate(np.transpose(__var__{}))".format(varId, varId))
-                lines.append("if len(__var__{}.shape) == 1:".format(varId))
-                lines.append("     __var__{}.shape += (1,)".format(varId))
-                '''
 
             # ----------------------------------------
             # data sources (external data
@@ -1488,12 +1449,11 @@ class SEDMLCodeFactory(object):
                 else:
                     warnings.warn("Unknown target in variable, no reference to SId: {}".format(target))
 
-        # calculate data generator (this must be adapted to work with the np arrays)
+        # calculate data generator
         value = evaluableMathML(mathml, variables=variables, array=True)
         lines.append("{} = {}".format(gid, value))
 
         return "\n".join(lines)
-
 
     def outputToPython(self, doc, output):
         """ Create output """
@@ -1614,18 +1574,6 @@ class SEDMLCodeFactory(object):
         lines.append("_engine = te.getPlottingEngine()")
         lines.append("tefig = _engine.newFigure(title='{}', xtitle='{}')\n".format(title, xtitle))
 
-        # stacking, currently disabled
-        # lines.append("_stacked = False")
-        # lines.append("_engine = te.getPlottingEngine()")
-        # for kc, curve in enumerate(output.getListOfCurves()):
-        #     xId = curve.getXDataReference()
-        #     lines.append("if {}.shape[1] > 1 and te.getDefaultPlottingEngine() == 'plotly':".format(xId))
-        #     lines.append("    stacked=True")
-        # lines.append("if _stacked:")
-        # lines.append("    tefig = _engine.newStackedFigure(title='{}', xtitle='{}')".format(title, xtitle))
-        # lines.append("else:")
-        # lines.append("    tefig = _engine.newFigure(title='{}', xtitle='{}')\n".format(title, xtitle))
-
         for kc, curve in enumerate(output.getListOfCurves()):
             logX = curve.getLogX()
             logY = curve.getLogY()
@@ -1642,17 +1590,22 @@ class SEDMLCodeFactory(object):
             elif dgy.isSetName():
                 yLabel += " ({})".format(dgy.getName())
 
+            marker = "o"
 
             # FIXME: add all the additional information to the plot, i.e. the settings and styles for a given curve
 
-            lines.append("for k in range({}.shape[1]):".format(xId))
-            lines.append("    extra_args = {}")
-            lines.append("    if k == 0:")
-            lines.append("        extra_args['name'] = '{}'".format(yLabel))
-            lines.append("    tefig.addXYDataset({}[:,k], {}[:,k], color='{}', tag='{}', **extra_args)".format(xId, yId, color, tag))
+            # Iterate over all elements
+            lines.extend([
+                "for __index__, __xitem__ in np.ndenumerate({}):".format(xId),
+                "    __yitem__ = {}[__index__]".format(yId),
+                "    extra_args = {}",
+                "    if __index__ == 0:",
+                "        extra_args['name'] = '{}'".format(yLabel),
+                "    extra_args['marker'] = '{}'".format(marker),
+                "    print(__xitem__, '~', __yitem__)",
+                "    tefig.addXYDataset(__xitem__, __yitem__, color='{}', tag='{}', **extra_args)".format(color, tag)
+            ])
 
-            # FIXME: endpoints must be handled via plotting functions
-            # lines.append("    fix_endpoints({}[:,k], {}[:,k], color='{}', tag='{}', fig=tefig)".format(xId, yId, color, tag))
         lines.append("fig = tefig.render()\n")
 
         if self.saveOutputs and self.createOutputs:

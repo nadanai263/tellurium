@@ -68,7 +68,6 @@ workingDir = r'{{ factory.workingDir }}'
 {{ dataGeneratorToPython(doc, dg) }}
 {% endfor %}
 
-{#
 {% if factory.createOutputs %}
 {{ helpers.heading(doc.getListOfOutputs(), 'Output') }}
 {% for out in doc.getListOfOutputs() %}
@@ -76,5 +75,4 @@ workingDir = r'{{ factory.workingDir }}'
 {{ outputToPython(doc, out) }}
 {% endfor %}
 {% endif %}
-#}
 ####################################################################################################
