@@ -542,7 +542,7 @@ class SEDMLCodeFactory(object):
                 lines.append("{} = te.loadCellMLModel(os.path.join(workingDir, '{}'))".format(mid, self.model_sources[mid]))
         # other
         else:
-            warnings.warn("Unsupported model language: '{}'.".format(language))
+            raise ValueError("Unsupported model language: '{}'.".format(language))
 
         # apply model changes
         for change in self.model_changes[mid]:
@@ -717,8 +717,14 @@ class SEDMLCodeFactory(object):
 
     @staticmethod
     def createTaskTree(doc, rootTask):
-        """ Creates the task tree.
-        Required for resolution of order of all simulations.
+        """ Creates the task tree for a given rootTask.
+
+        Resolves the repeated tasks into a tree. This is required for
+        resolution of order of all simulations.
+
+        :param doc: SEDDocument
+        :param rootTask: task which is on top level of listOfTasks
+        :return: task tree
         """
         def add_children(node):
             typeCode = node.task.getTypeCode()
@@ -754,37 +760,49 @@ class SEDMLCodeFactory(object):
         return subtasks
 
 
-
     @staticmethod
     def taskTreeToPython(doc, tree):
         """ Python code generation from task tree. """
-
         print(tree)
-        # FIXME: generate the empty ndarray for storage
-        # np.empty(shape=(N1, N2, N3), dtype=object)
+        treeNodes = [n for n in tree]
+        print([str(n) for n in treeNodes])
+
+        # generate empty ndarray for storage
+        shape, rangeIds = SEDMLCodeFactory.getShapeFromTaskTree(tree)
+
+
+        print(shape, rangeIds)
+        rootTask = treeNodes[0].task
+        lines = [
+            '{} = np.empty(shape={}, dtype=object)'.format(rootTask.getId(), shape)
+        ]
+
 
 
         # go forward through task tree
-        lines = []
         nodeStack = SEDMLCodeFactory.Stack()
-        treeNodes = [n for n in tree]
 
         # iterate over the tree & store the results in the ndarray
         for kn, node in enumerate(treeNodes):
-            taskType = node.task.getTypeCode()
+            task = node.task
+            taskType = task.getTypeCode()
 
             # Create information for task
             # We are going down in the tree
             if taskType == libsedml.SEDML_TASK_REPEATEDTASK:
                 taskLines = SEDMLCodeFactory.repeatedTaskToPython(doc, node=node)
-
             elif taskType == libsedml.SEDML_TASK:
-                tid = node.task.getId()
                 taskLines = SEDMLCodeFactory.simpleTaskToPython(doc=doc, node=node)
+                # add the storage of the results
+                # fill with the range ids __k__{}
+
+                index_str = ', '.join(['__k__{}'.format(rid) for rid in rangeIds])
+                taskLines.append('{}[{}] = {}'.format(rootTask.getId(), index_str, task.getId()))
             else:
                 lines.append("# Unsupported task: {}".format(taskType))
                 warnings.warn("Unsupported task: {}".format(taskType))
 
+            # add lines for task
             lines.extend(["    "*node.depth + line for line in taskLines])
 
             '''
@@ -827,13 +845,28 @@ class SEDMLCodeFactory(object):
         return "\n".join(lines)
 
     @staticmethod
-    def resultShapeFromTaskTree(tree):
-        """
+    def getShapeFromTaskTree(tree):
+        """ Returns the shape of the task tree with the corresponding master ranges.
 
         :param tree: task tree for the given task
         :return:
         """
-        # TODO: implement
+        shape = []
+        rangeIds = []
+
+        # iterate over the tree
+        treeNodes = [n for n in tree]
+        for node in treeNodes:
+            task = node.task
+            size, rangeId = SEDMLCodeFactory.getTaskSize(task)
+
+            # only collecting repeated tasks
+            if size > 1:
+                shape.append(size)
+                rangeIds.append(rangeId)
+            # FIXME: handle the case of multiple subtasks
+
+        return shape, rangeIds
 
     @staticmethod
     def getTaskSize(task):
@@ -843,7 +876,7 @@ class SEDMLCodeFactory(object):
         resulting storage containers for the nested repeated tasks.
 
         :param task: task
-        :return:
+        :return: size, range_id
         """
         size = None
         taskType = task.getTypeCode()
@@ -851,12 +884,12 @@ class SEDMLCodeFactory(object):
             # master range
             rangeId = task.getRangeId()
             masterRange = task.getRange(rangeId)
-            size = getRangeSize(masterRange)
+            size = SEDMLCodeFactory.getRangeSize(masterRange)
 
         elif taskType == libsedml.SEDML_TASK:
-            size = 1
+            size, rangeId = 1, None
 
-        return size
+        return size, rangeId
 
     @staticmethod
     def getRangeSize(range):
@@ -927,7 +960,7 @@ class SEDMLCodeFactory(object):
         lines = []
         task = node.task
         lines.append("# Task: <{}>".format(task.getId()))
-        lines.append("{} = [None]".format(task.getId()))
+        # lines.append("{} = [None]".format(task.getId()))
 
         mid = task.getModelReference()
         sid = task.getSimulationReference()
@@ -1046,7 +1079,8 @@ class SEDMLCodeFactory(object):
                              )
 
         # handle result variable
-        resultVariable = "{}[0]".format(task.getId())
+        # resultVariable = "{}[0]".format(task.getId())
+        resultVariable = "{}".format(task.getId())
 
         # -------------------------------------------------------------------------
         # <UNIFORM TIMECOURSE>
@@ -1106,7 +1140,8 @@ class SEDMLCodeFactory(object):
         """
         # storage of results
         task = node.task
-        lines = ["", "{} = []".format(task.getId())]
+        # lines = ["", "{} = []".format(task.getId())]
+        lines = ["# Task: <{}>".format(task.getId())]
 
         # <Range Definition>
         # master range
