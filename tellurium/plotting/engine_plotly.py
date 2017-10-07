@@ -50,6 +50,11 @@ class PlotlyFigure(PlottingFigure):
                 kwargs['mode'] = dataset['mode']
             else:
                 kwargs['mode'] = 'lines'
+
+            if 'marker' in dataset and dataset['marker'] is not None:
+                kwargs['marker'] = dataset['marker']
+
+            # FIXME: handle all the plot arguments
             traces.append(Scatter(
                 x = dataset['x'],
                 y = dataset['y'],
