@@ -692,6 +692,7 @@ class SEDMLCodeFactory(object):
                 for node in child:
                     yield node
 
+    '''
     class Stack(object):
         """ Stack implementation for nodes."""
         def __init__(self):
@@ -714,6 +715,7 @@ class SEDMLCodeFactory(object):
 
         def __str__(self):
             return "stack: " + str([item.info() for item in self.items])
+    '''
 
     @staticmethod
     def createTaskTree(doc, rootTask):
@@ -763,24 +765,19 @@ class SEDMLCodeFactory(object):
     @staticmethod
     def taskTreeToPython(doc, tree):
         """ Python code generation from task tree. """
-        print(tree)
+
         treeNodes = [n for n in tree]
-        print([str(n) for n in treeNodes])
 
         # generate empty ndarray for storage
         shape, rangeIds = SEDMLCodeFactory.getShapeFromTaskTree(tree)
 
-
+        print(tree)
         print(shape, rangeIds)
+
         rootTask = treeNodes[0].task
         lines = [
             '{} = np.empty(shape={}, dtype=object)'.format(rootTask.getId(), shape)
         ]
-
-
-
-        # go forward through task tree
-        nodeStack = SEDMLCodeFactory.Stack()
 
         # iterate over the tree & store the results in the ndarray
         for kn, node in enumerate(treeNodes):
@@ -793,9 +790,7 @@ class SEDMLCodeFactory(object):
                 taskLines = SEDMLCodeFactory.repeatedTaskToPython(doc, node=node)
             elif taskType == libsedml.SEDML_TASK:
                 taskLines = SEDMLCodeFactory.simpleTaskToPython(doc=doc, node=node)
-                # add the storage of the results
-                # fill with the range ids __k__{}
-
+                # store the result at correct indices in array
                 index_str = ', '.join(['__k__{}'.format(rid) for rid in rangeIds])
                 taskLines.append('{}[{}] = {}'.format(rootTask.getId(), index_str, task.getId()))
             else:
@@ -804,43 +799,6 @@ class SEDMLCodeFactory(object):
 
             # add lines for task
             lines.extend(["    "*node.depth + line for line in taskLines])
-
-            '''
-            # Collect information
-            # We have to go back up
-            # Look at next node in the treeNodes (this is the next one to write)
-            if kn == (len(treeNodes)-1):
-                nextNode = None
-            else:
-                nextNode = treeNodes[kn+1]
-
-            # The next node is further up in the tree, or there is no next node
-            # and still nodes on the stack
-            if (nextNode is None) or (nextNode.depth < node.depth):
-
-                # necessary to pop nodes from the stack and close the code
-                test = True
-                while test is True:
-                    # stack is empty
-                    if nodeStack.size() == 0:
-                        test = False
-                        continue
-                    # try to pop next one
-                    peek = nodeStack.peek()
-                    if (nextNode is None) or (peek.depth > nextNode.depth):
-
-                        lines.extend([
-                            "",
-                            "    " * node.depth + "{}.extend({})".format(peek.task.getId(), node.task.getId()),
-                        ])
-                        node = nodeStack.pop()
-
-                    else:
-                        test = False
-            else:
-                # we are going done or next subtask -> put node on stack
-                nodeStack.push(node)
-            '''
 
         return "\n".join(lines)
 
@@ -898,7 +856,6 @@ class SEDMLCodeFactory(object):
         :param range:
         :return:
         """
-        size = None
         rangeType = range.getTypeCode()
         if rangeType == libsedml.SEDML_RANGE_UNIFORMRANGE:
             size = range.getNumberOfPoints() + 1  # One point more than number of points
@@ -1141,7 +1098,7 @@ class SEDMLCodeFactory(object):
         # storage of results
         task = node.task
         # lines = ["", "{} = []".format(task.getId())]
-        lines = ["# Task: <{}>".format(task.getId())]
+        lines = ["\n", "# Task: <{}>".format(task.getId())]
 
         # <Range Definition>
         # master range
@@ -1268,8 +1225,6 @@ class SEDMLCodeFactory(object):
                     selections.add(expr)
 
         return selections
-
-
 
     @staticmethod
     def isSupportedAlgorithmForSimulationType(kisao, simType):
@@ -1470,25 +1425,41 @@ class SEDMLCodeFactory(object):
             taskId = var.getTaskReference()
             task = doc.getTask(taskId)
 
+            # --------------------
             # simulation data
+            # --------------------
             if task is not None:
-                modelId = task.getModelReference()
 
+                modelId = task.getModelReference()
                 selection = SEDMLCodeFactory.selectionFromVariable(var, modelId)
+                sid = selection.id
+
+                # additional information for heuristic processing
                 isTime = False
                 if selection.type == "symbol" and selection.id == "time":
                     isTime = True
 
-                resetModel = True
+                isResetModel = True
                 if task.getTypeCode() == libsedml.SEDML_TASK_REPEATEDTASK:
-                    resetModel = task.getResetModel()
+                    isResetModel = task.getResetModel()
 
-                sid = selection.id
                 if selection.type == "concentration":
                     sid = "[{}]".format(selection.id)
 
+                # get the shape from the result and read out the variable from every element of the ndarray object
+                    # get the dimensions, i.e., what is the shape of the task
+                    # DataGenerator have the same dimensions like the underlying task
+                    # generate empty ndarray for storage
+
+                # [sim['{}'] for sim in {}]
+                lines = [
+                    "__var__{} = np.empty(shape={}.shape, dtype=object)".format(varId, task.getId()),
+                    "for __index__, __item__ in np.ndenumerate({}):".format(task.getId()),
+                    "    __var__{}[__index__] = __item__['{}']".format(varId, sid)
+                ]
+                '''
                 # Series of curves
-                if resetModel is True:
+                if isResetModel is True:
                     # If each entry in the task consists of a single point (e.g. steady state scan)
                     # , concatenate the points. Otherwise, plot as separate curves.
                     lines.append("__var__{} = np.concatenate([sim['{}'] for sim in {}])".format(varId, sid, taskId))
@@ -1504,8 +1475,11 @@ class SEDMLCodeFactory(object):
                         lines.append("__var__{} = np.concatenate(np.transpose(__var__{}))".format(varId, varId))
                 lines.append("if len(__var__{}.shape) == 1:".format(varId))
                 lines.append("     __var__{}.shape += (1,)".format(varId))
+                '''
 
-            # check for data sources
+            # ----------------------------------------
+            # data sources (external data
+            # ----------------------------------------
             else:
                 target = var.getTarget()
                 if target.startswith('#'):
@@ -1514,7 +1488,7 @@ class SEDMLCodeFactory(object):
                 else:
                     warnings.warn("Unknown target in variable, no reference to SId: {}".format(target))
 
-        # calculate data generator
+        # calculate data generator (this must be adapted to work with the np arrays)
         value = evaluableMathML(mathml, variables=variables, array=True)
         lines.append("{} = {}".format(gid, value))
 
