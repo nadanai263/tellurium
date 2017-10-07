@@ -761,7 +761,7 @@ class SEDMLCodeFactory(object):
 
         print(tree)
         # FIXME: generate the empty ndarray for storage
-
+        # np.empty(shape=(N1, N2, N3), dtype=object)
 
 
         # go forward through task tree
@@ -769,7 +769,7 @@ class SEDMLCodeFactory(object):
         nodeStack = SEDMLCodeFactory.Stack()
         treeNodes = [n for n in tree]
 
-        # iterate over the tree
+        # iterate over the tree & store the results in the ndarray
         for kn, node in enumerate(treeNodes):
             taskType = node.task.getTypeCode()
 
@@ -788,25 +788,6 @@ class SEDMLCodeFactory(object):
             lines.extend(["    "*node.depth + line for line in taskLines])
 
             '''
-            @staticmethod
-            def simpleTaskToPython(doc, task):
-                """ Create python for simple task. """
-                for ksub, subtask in enumerate(subtasks):
-                    t = doc.getTask(subtask.getTask())
-
-                    resultVariable = "__subtask__".format(t.getId())
-                    selections = SEDMLCodeFactory.selectionsForTask(doc=doc, task=task)
-                    if t.getTypeCode() == libsedml.SEDML_TASK:
-                        forLines.extend(SEDMLCodeFactory.subtaskToPython(doc, task=t,
-                                                                  selections=selections,
-                                                                  resultVariable=resultVariable))
-                        forLines.append("{}.extend([__subtask__])".format(task.getId()))
-
-                    elif t.getTypeCode() == libsedml.SEDML_TASK_REPEATEDTASK:
-                        forLines.extend(SEDMLCodeFactory.repeatedTaskToPython(doc, task=t))
-                        forLines.append("{}.extend({})".format(task.getId(), t.getId()))
-            '''
-
             # Collect information
             # We have to go back up
             # Look at next node in the treeNodes (this is the next one to write)
@@ -829,24 +810,9 @@ class SEDMLCodeFactory(object):
                     # try to pop next one
                     peek = nodeStack.peek()
                     if (nextNode is None) or (peek.depth > nextNode.depth):
-                        # TODO: reset evaluation has to be defined here
-                        # determine if it's steady state
-                        # if taskType == libsedml.SEDML_TASK_REPEATEDTASK:
-                        # print('task {}'.format(node.task.getId()))
-                        # print('  peek {}'.format(peek.task.getId()))
-                        if node.task.getTypeCode() == libsedml.SEDML_TASK_REPEATEDTASK:
-                        # if peek.task.getTypeCode() == libsedml.SEDML_TASK_REPEATEDTASK:
-                            # sid = task.getSimulationReference()
-                            # simulation = doc.getSimulation(sid)
-                            # simType = simulation.getTypeCode()
-                            # if simType is libsedml.SEDML_SIMULATION_STEADYSTATE:
-                            terminator = 'terminate_trace({})'.format(node.task.getId())
-                        else:
-                            terminator = '{}'.format(node.task.getId())
 
                         lines.extend([
                             "",
-                            # "    "*node.depth + "{}.extend({})".format(peek.task.getId(), terminator),
                             "    " * node.depth + "{}.extend({})".format(peek.task.getId(), node.task.getId()),
                         ])
                         node = nodeStack.pop()
@@ -856,8 +822,18 @@ class SEDMLCodeFactory(object):
             else:
                 # we are going done or next subtask -> put node on stack
                 nodeStack.push(node)
+            '''
 
         return "\n".join(lines)
+
+    @staticmethod
+    def resultShapeFromTaskTree(tree):
+        """
+
+        :param tree: task tree for the given task
+        :return:
+        """
+        # TODO: implement
 
     @staticmethod
     def getTaskSize(task):
