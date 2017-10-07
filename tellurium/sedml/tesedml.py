@@ -767,7 +767,7 @@ class SEDMLCodeFactory(object):
                 # store the result at correct indices in array
 
                 indices = []
-                for rid, length in dict(zip(shape, rangeIds)).items():
+                for rid, length in dict(zip(rangeIds, shape)).items():
                     index = '0'
                     if (length is not None) and (length > 1):
                         index = '__k__{}'.format(rid)
@@ -1443,11 +1443,15 @@ class SEDMLCodeFactory(object):
         lines = []
         typeCode = output.getTypeCode()
         if typeCode == libsedml.SEDML_OUTPUT_REPORT:
-            lines.extend(SEDMLCodeFactory.outputReportToPython(self, doc, output))
+            # lines.extend(SEDMLCodeFactory.outputReportToPython(self, doc, output))
+            # FIXME: work on the reports
+            warnings.warn("REPORTS NOT GENERATED !")
         elif typeCode == libsedml.SEDML_OUTPUT_PLOT2D:
             lines.extend(SEDMLCodeFactory.outputPlot2DToPython(self, doc, output))
         elif typeCode == libsedml.SEDML_OUTPUT_PLOT3D:
-            lines.extend(SEDMLCodeFactory.outputPlot3DToPython(self, doc, output))
+            # lines.extend(SEDMLCodeFactory.outputPlot3DToPython(self, doc, output))
+            # FIXME: work on plot3d
+            warnings.warn("PLOT3D NOT GENERATED !")
         else:
             warnings.warn("# Unsupported output type '{}' in output {}".format(output.getElementName(), output.getId()))
         return '\n'.join(lines)
@@ -1472,7 +1476,21 @@ class SEDMLCodeFactory(object):
             # data generator (the id is the id of the data in python)
             dgId = dataSet.getDataReference()
             dgIds.append(dgId)
+
+
+
             columns.append("{}[:,k]".format(dgId))
+
+
+        # TODO: write all the results in one column and store the colum
+        lines.extend([
+            "for __index__, __xitem__ in np.ndenumerate({}):".format(xId),
+
+            "    tefig.addXYDataset(__xitem__, __yitem__, color='{}', tag='{}', **extra_args)".format(color, tag)
+        ])
+
+
+
         # create data frames for the repeats
         lines.append("__dfs__{} = []".format(output.getId()))
         lines.append("for k in range({}.shape[1]):".format(dgIds[0]))
@@ -1584,8 +1602,8 @@ class SEDMLCodeFactory(object):
                 "    extra_args = {}",
                 "    if __index__ == 0:",
                 "        extra_args['name'] = '{}'".format(yLabel),
-                "    extra_args['marker'] = '{}'".format(marker),
-                "    print(__xitem__, '~', __yitem__)",
+                #"    extra_args['marker'] = '{}'".format(marker),
+                #"    print(__xitem__, '~', __yitem__)",
                 "    tefig.addXYDataset(__xitem__, __yitem__, color='{}', tag='{}', **extra_args)".format(color, tag)
             ])
 
