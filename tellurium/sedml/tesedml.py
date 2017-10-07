@@ -692,31 +692,6 @@ class SEDMLCodeFactory(object):
                 for node in child:
                     yield node
 
-    '''
-    class Stack(object):
-        """ Stack implementation for nodes."""
-        def __init__(self):
-            self.items = []
-
-        def isEmpty(self):
-            return self.items == []
-
-        def push(self, item):
-            self.items.append(item)
-
-        def pop(self):
-            return self.items.pop()
-
-        def peek(self):
-            return self.items[len(self.items)-1]
-
-        def size(self):
-            return len(self.items)
-
-        def __str__(self):
-            return "stack: " + str([item.info() for item in self.items])
-    '''
-
     @staticmethod
     def createTaskTree(doc, rootTask):
         """ Creates the task tree for a given rootTask.
@@ -790,8 +765,16 @@ class SEDMLCodeFactory(object):
             elif taskType == libsedml.SEDML_TASK:
                 taskLines = SEDMLCodeFactory.simpleTaskToPython(doc=doc, node=node)
                 # store the result at correct indices in array
-                index_str = ', '.join(['__k__{}'.format(rid) for rid in rangeIds])
-                taskLines.append('{}[{}] = {}'.format(rootTask.getId(), index_str, task.getId()))
+
+                indices = []
+                for rid, length in dict(zip(shape, rangeIds)).items():
+                    index = '0'
+                    if (length is not None) and (length > 1):
+                        index = '__k__{}'.format(rid)
+                    indices.append(index)
+                index_str = ', '.join(indices)
+                # taskLines.append('{}[{}] = {}'.format(rootTask.getId(), index_str, task.getId()))
+                taskLines.append('{}[{}] = __tmp__'.format(rootTask.getId(), index_str))
             else:
                 lines.append("# Unsupported task: {}".format(taskType))
                 warnings.warn("Unsupported task: {}".format(taskType))
@@ -818,9 +801,9 @@ class SEDMLCodeFactory(object):
             size, rangeId = SEDMLCodeFactory.getTaskSize(task)
 
             # only collecting repeated tasks
-            if size > 1:
-                shape.append(size)
-                rangeIds.append(rangeId)
+            #if size > 1:
+            shape.append(size)
+            rangeIds.append(rangeId)
 
         return shape, rangeIds
 
@@ -1035,7 +1018,7 @@ class SEDMLCodeFactory(object):
 
         # handle result variable
         # resultVariable = "{}[0]".format(task.getId())
-        resultVariable = "{}".format(task.getId())
+        resultVariable = "__tmp__"
 
         # -------------------------------------------------------------------------
         # <UNIFORM TIMECOURSE>

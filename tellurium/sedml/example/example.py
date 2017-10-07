@@ -15,6 +15,7 @@ if __name__ == "__main__":
         os.makedirs(outputDir)
 
 
-    test_omex = os.path.join(OMEX_TEST_DIR, 'specification', 'L1V3', 'L1V3_parameter-scan-2d.omex')
+    # test_omex = os.path.join(OMEX_TEST_DIR, 'specification', 'L1V3', 'L1V3_parameter-scan-2d.omex')
+    test_omex = os.path.join(OMEX_TEST_DIR, 'specification', 'L1V3', 'L1V3_repressilator.omex')
     dgs = te.executeCombineArchive(test_omex, printPython=True, outputDir=outputDir, saveOutputs=True,
                                    workingDir=outputDir)
