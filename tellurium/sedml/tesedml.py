@@ -658,7 +658,6 @@ class SEDMLCodeFactory(object):
 
         # resolve task tree (order & dependency of tasks) & generate code
         taskTree = SEDMLCodeFactory.createTaskTree(doc, rootTask=task)
-        print(taskTree)
         return SEDMLCodeFactory.taskTreeToPython(doc, tree=taskTree)
 
     class TaskNode(object):
@@ -754,9 +753,16 @@ class SEDMLCodeFactory(object):
             subtasks = [st for (stOrder, st) in sorted(zip(subtaskOrder, subtasks))]
         return subtasks
 
+
+
     @staticmethod
     def taskTreeToPython(doc, tree):
         """ Python code generation from task tree. """
+
+        print(tree)
+        # FIXME: generate the empty ndarray for storage
+
+
 
         # go forward through task tree
         lines = []
@@ -852,6 +858,81 @@ class SEDMLCodeFactory(object):
                 nodeStack.push(node)
 
         return "\n".join(lines)
+
+    @staticmethod
+    def getTaskSize(task):
+        """ Returns the size of given task, i.e., the number of iterations of the task based on the master range.
+
+        Uses the range of the task to get the length, required to create the
+        resulting storage containers for the nested repeated tasks.
+
+        :param task: task
+        :return:
+        """
+        size = None
+        taskType = task.getTypeCode()
+        if taskType == libsedml.SEDML_TASK_REPEATEDTASK:
+            # master range
+            rangeId = task.getRangeId()
+            masterRange = task.getRange(rangeId)
+            size = getRangeSize(masterRange)
+
+        elif taskType == libsedml.SEDML_TASK:
+            size = 1
+
+        return size
+
+    @staticmethod
+    def getRangeSize(range):
+        """ Returns the size of given range, i.e., the number of iterations.
+
+        :param range:
+        :return:
+        """
+        size = None
+        rangeType = range.getTypeCode()
+        if rangeType == libsedml.SEDML_RANGE_UNIFORMRANGE:
+            size = range.getNumberOfPoints() + 1  # One point more than number of points
+        elif rangeType == libsedml.SEDML_RANGE_VECTORRANGE:
+            size = range.getNumValues()
+        elif rangeType == libsedml.SEDML_RANGE_FUNCTIONALRANGE:
+            size = 1  # takes the iteration of the enclosing repeated task, but itself is of length 1
+        else:
+            raise ValueError("Range type is not supported: {}".format(rangeType))
+        return size
+
+
+    @staticmethod
+    def uniformRangeToPython(r):
+        """ Create python lines for uniform range.
+        :param r:
+        :type r:
+        :return:
+        :rtype:
+        """
+        lines = []
+        rId = r.getId()
+        rStart = r.getStart()
+        rEnd = r.getEnd()
+        rPoints = r.getNumberOfPoints() + 1  # One point more than number of points
+        rType = r.getType()
+        if rType in ['Linear', 'linear']:
+            lines.append("__range__{} = np.linspace(start={}, stop={}, num={})".format(rId, rStart, rEnd, rPoints))
+        elif rType in ['Log', 'log']:
+            lines.append("__range__{} = np.logspace(start={}, stop={}, num={})".format(rId, rStart, rEnd, rPoints))
+        else:
+            warnings.warn("Unsupported range type in UniformRange: {}".format(rType))
+        return lines
+
+    @staticmethod
+    def vectorRangeToPython(r):
+        lines = []
+        __range = np.zeros(shape=[r.getNumValues()])
+        for k, v in enumerate(r.getValues()):
+            __range[k] = v
+        lines.append("__range__{} = {}".format(r.getId(), list(__range)))
+        return lines
+
 
     @staticmethod
     def simpleTaskToPython(doc, node):
@@ -1035,6 +1116,7 @@ class SEDMLCodeFactory(object):
         # -------------------------------------------------------------------------
         else:
             lines.append("# Unsupported simulation: {}".format(simType))
+            raise ValueError("Simulation is not supported: {}".format(simType))
 
         return lines
 
@@ -1054,12 +1136,14 @@ class SEDMLCodeFactory(object):
         # master range
         rangeId = task.getRangeId()
         masterRange = task.getRange(rangeId)
-        if masterRange.getTypeCode() == libsedml.SEDML_RANGE_UNIFORMRANGE:
+        masterType = masterRange.getTypeCode()
+        if masterType == libsedml.SEDML_RANGE_UNIFORMRANGE:
             lines.extend(SEDMLCodeFactory.uniformRangeToPython(masterRange))
-        elif masterRange.getTypeCode() == libsedml.SEDML_RANGE_VECTORRANGE:
+        elif masterType == libsedml.SEDML_RANGE_VECTORRANGE:
             lines.extend(SEDMLCodeFactory.vectorRangeToPython(masterRange))
-        elif masterRange.getTypeCode() == libsedml.SEDML_RANGE_FUNCTIONALRANGE:
-            warnings.warn("FunctionalRange for master range not supported in task.")
+        elif masterType == libsedml.SEDML_RANGE_FUNCTIONALRANGE:
+            raise warnings.warn("FunctionalRange for master range not supported in task.")
+
         # lock-in ranges
         for r in task.getListOfRanges():
             if r.getId() != rangeId:
@@ -1174,36 +1258,7 @@ class SEDMLCodeFactory(object):
 
         return selections
 
-    @staticmethod
-    def uniformRangeToPython(r):
-        """ Create python lines for uniform range.
-        :param r:
-        :type r:
-        :return:
-        :rtype:
-        """
-        lines = []
-        rId = r.getId()
-        rStart = r.getStart()
-        rEnd = r.getEnd()
-        rPoints = r.getNumberOfPoints()+1  # One point more than number of points
-        rType = r.getType()
-        if rType in ['Linear', 'linear']:
-            lines.append("__range__{} = np.linspace(start={}, stop={}, num={})".format(rId, rStart, rEnd, rPoints))
-        elif rType in ['Log', 'log']:
-            lines.append("__range__{} = np.logspace(start={}, stop={}, num={})".format(rId, rStart, rEnd, rPoints))
-        else:
-            warnings.warn("Unsupported range type in UniformRange: {}".format(rType))
-        return lines
 
-    @staticmethod
-    def vectorRangeToPython(r):
-        lines = []
-        __range = np.zeros(shape=[r.getNumValues()])
-        for k, v in enumerate(r.getValues()):
-            __range[k] = v
-        lines.append("__range__{} = {}".format(r.getId(), list(__range)))
-        return lines
 
     @staticmethod
     def isSupportedAlgorithmForSimulationType(kisao, simType):
