@@ -85,12 +85,11 @@ def combineArchiveFromDirectory(directory, omexPath, creators=None, creators_for
     :param
     :return:
     """
-    # FIXME: check if manifest exists in the folder and reuse it
     manifest_path = os.path.join(directory, MANIFEST_PATTERN)
 
-    print(manifest_path)
     if os.path.exists(manifest_path):
-        warnings.warn("Manifest file exists in directory, but not used in COMBINE archive creation: %s".format(manifest_path))
+        # FIXME: reuse information in existing manifest
+        warnings.warn("Manifest file exists in directory, but not used in COMBINE archive creation: {}".format(manifest_path))
 
     # add the base entry
     entries = [
@@ -102,6 +101,15 @@ def combineArchiveFromDirectory(directory, omexPath, creators=None, creators_for
         for file in files:
             file_path = os.path.join(root, file)
             location = os.path.relpath(file_path, directory)
+
+            # handle existing manifest file
+            if location == MANIFEST_PATTERN:
+                # don't package the manifest file
+                continue
+
+            # handle existing metadata files
+            # FIXME: handle existing metadata
+
             # guess the format
             format = libcombine.KnownFormats.guessFormat(file_path)
             master = False
@@ -116,10 +124,6 @@ def combineArchiveFromDirectory(directory, omexPath, creators=None, creators_for
 
     # write all the entries
     combineArchiveFromEntries(omexPath=omexPath, entries=entries, workingDir=directory)
-
-
-    from pprint import pprint
-    pprint(entries)
 
 
 def combineArchiveFromEntries(omexPath, entries, workingDir):
