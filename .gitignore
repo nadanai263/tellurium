@@ -23,6 +23,7 @@ MANIFEST
 # Text editors
 *.swp
 
+
 # Installer logs
 pip-log.txt
 
@@ -59,7 +60,6 @@ tellurium/dev/oven/.ipynb_checkpoints/
 # dev stuff
 tellurium/dev/oven/__tellurium__/
 tellurium/sedml/__tmp__/
-
 
 # auto-generated html docs
 docs/_build

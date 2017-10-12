@@ -100,10 +100,3 @@ def test_createCombineArchiveFromDirectory():
     omex.combineArchiveFromDirectory(omexPath=omexPath, directory=directory)
     assert omexPath is not None
     # TODO: additional checks via extracting information from the archive again
-
-
-
-
-
-
-
