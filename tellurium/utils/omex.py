@@ -155,7 +155,7 @@ def addEntriesToCombineArchive(omexPath, entries, workingDir):
     print("*" * 80)
 
 
-def _addEntriesToArchive(omexPath, entries, workingDir, add_entries):
+def _addEntriesToArchive(omexPath, entries, workingDir, add_entries, strict=True):
     """
 
     :param archive:
@@ -166,7 +166,6 @@ def _addEntriesToArchive(omexPath, entries, workingDir, add_entries):
     omexPath = os.path.abspath(omexPath)
     print('omexPath:', omexPath)
     print('workingDir:', workingDir)
-
 
     if not os.path.exists(workingDir):
         raise IOError("Working directory does not exist: {}".format(workingDir))
@@ -189,36 +188,84 @@ def _addEntriesToArchive(omexPath, entries, workingDir, add_entries):
     # timestamp
     time_now = libcombine.OmexDescription.getCurrentDateAndTime()
 
-    print('*'*80)
+    # ----------------------------------
+    # Create metadata file
+    # ----------------------------------
+    # create the metadata file
+    # <content format = "http://identifiers.org/combine.specifications/omex-metadata" location = "metadata.rdf" / >
+
+    metadata_xml = []
     for entry in entries:
-        print(entry)
+        if entry.format is None or len(entry.format) == 0:
+            # only add known files to archive metadata
+            continue
+
         location = entry.location
-        path = os.path.join(workingDir, location)
+
+        # add metadata for location
+        description = entry.description
+        creators = entry.creators
+
+        # Create an omex description
+        omex_d = libcombine.OmexDescription()
+        omex_d.setAbout(location)
+        omex_d.setCreated(time_now)
+
+        if not description:
+            description = "-"
+        omex_d.setDescription(description)
+
+        if creators:
+            for c in creators:
+                creator = libcombine.VCard()
+                creator.setFamilyName(c.familyName)
+                creator.setGivenName(c.givenName)
+                creator.setEmail(c.email)
+                creator.setOrganization(c.organization)
+                omex_d.addCreator(creator)
+
+        metadata_xml.append(omex_d.toXML())
+
+    # store the metadata file
+    # the library creates separate metadata file for every entry, so using this hack for now
+    # see https://github.com/sbmlteam/libCombine/issues/23
+    # FIXME: bad hack for now, but seems to work
+    contents = [(item.split("\n"))[2:-2] for item in metadata_xml]
+    start_str = "<?xml version='1.0' encoding='UTF-8'?>\n" \
+                "<rdf:RDF xmlns:rdf='http://www.w3.org/1999/02/22-rdf-syntax-ns#' xmlns:dcterms='http://purl.org/dc/terms/' xmlns:vCard='http://www.w3.org/2006/vcard/ns#'>"
+    content_str = "\n".join(["\n".join(lines) for lines in contents])
+    end_str = "</rdf:RDF>"
+    metadata_str = "\n".join([start_str, content_str, end_str])
+
+    f_metadata = os.path.join(workingDir, "metadata.rdf")
+    with open(f_metadata, "w") as f:
+        f.write(metadata_str)
+
+    # ----------------------------------
+    # Add entries to COMBINE archive
+    # ----------------------------------
+    archive = libcombine.CombineArchive()
+
+    for entry in entries:
+        path = os.path.join(workingDir, entry.location)
+
         if not os.path.exists(path):
-            raise IOError("File does not exist at given location: {}".format(path))
+            msg = "File does not exist at given location: {}".format(path)
+            if strict:
+                raise IOError(msg)
+            else:
+                warnings.warn(msg)
 
-        archive.addFile(path, location, entry.format, entry.master)
+        # add file to archive
+        if entry.master:
+            print("\t*\t", path)
+        else:
+            print("\t", path)
+        archive.addFile(path, entry.location, entry.format, entry.master)
 
-        if entry.description or entry.creators:
-            omex_d = libcombine.OmexDescription()
-            omex_d.setAbout(location)
-            omex_d.setCreated(time_now)
-
-            if entry.description:
-                omex_d.setDescription(entry.description)
-
-            if entry.creators:
-                for c in entry.creators:
-                    creator = libcombine.VCard()
-                    creator.setFamilyName(c.familyName)
-                    creator.setGivenName(c.givenName)
-                    creator.setEmail(c.email)
-                    creator.setOrganization(c.organization)
-                    omex_d.addCreator(creator)
-
-            archive.addMetadata(location, omex_d)
-
-
+    # ----------------------------------
+    # Write Combine archives
+    # ----------------------------------
     archive.writeToFile(omexPath)
     archive.cleanUp()
 
@@ -397,12 +444,6 @@ def printArchive(fileName):
         entry = archive.getEntry(i)
         print(" {0}: location: {1} format: {2}".format(i, entry.getLocation(), entry.getFormat()))
         printMetaDataFor(archive, entry.getLocation())
-
-        # the entry could now be extracted via
-        # archive.extractEntry(entry.getLocation(), <filename or folder>)
-
-        # or used as string
-        # content = archive.extractEntryToString(entry.getLocation());
 
     archive.cleanUp()
 
