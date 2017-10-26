@@ -122,10 +122,10 @@ Currently, only a legacy version of the Mac Spyder IDE is available. We recommen
 2. Double-click the .dmg file to open a new window
 3. Double-click the Spyder icon
 
-### pip package (no front-end)
+### Install via pip (no front-end)
 [![PyPI version](https://badge.fury.io/py/tellurium.svg)](https://badge.fury.io/py/tellurium)
 
-Binaries wheels for `Tellurium` are available from PyPi and support 64-bit Python versions 2.7, 3.5, and 3.6 for Windows, Mac, and Linux.
+Binary pip packages for `Tellurium` are available from PyPi and support 64-bit Python versions 2.7, 3.5, and 3.6 for Windows, Mac, and Linux.
 Pip packages are tested on Fedora 22, Debian 8, Ubuntu 14.04, and Mac OS X 10.10.
 
 The latest package release can be installed via
@@ -135,9 +135,7 @@ pip install tellurium
 The latest stable version from the repository can be installed via
 ```
 pip install git+https://github.com/sys-bio/tellurium.git
-```
-
-Detailed instructions for using the `conda` package manager are available [here](http://conda.pydata.org/docs/using/pkgs.html). 
+``` 
 
 ## Legal
 
